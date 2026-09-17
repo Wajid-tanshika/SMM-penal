@@ -11,11 +11,22 @@ type Order = {
   quantity: number;
   price: number;
   status: string;
+  platform: string | null;
+  country: string | null;
+  service_category: string | null;
   created_at: string;
+};
+
+type WalletTransaction = {
+  id: number;
+  amount: number;
+  reference_id: string | null;
+  status: string;
 };
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -37,20 +48,31 @@ export default function OrdersPage() {
       return;
     }
 
-    const { data, error } = await supabase
+    const { data: orderData, error: orderError } = await supabase
       .from("orders")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("Orders error:", error);
-      setMessage(`Failed to load orders: ${error.message}`);
+    if (orderError) {
+      console.error("Orders error:", orderError);
+      setMessage(`Failed to load orders: ${orderError.message}`);
       setLoading(false);
       return;
     }
 
-    setOrders(data ?? []);
+    const { data: transactionData, error: transactionError } = await supabase
+      .from("wallet_transactions")
+      .select("id, amount, reference_id, status")
+      .eq("user_id", user.id)
+      .eq("type", "debit");
+
+    if (transactionError) {
+      console.error("Wallet transactions error:", transactionError);
+    }
+
+    setOrders(orderData ?? []);
+    setTransactions(transactionData ?? []);
     setLoading(false);
   }
 
@@ -174,6 +196,21 @@ export default function OrdersPage() {
 
                 <div className="mt-4 space-y-2 text-sm">
                   <div>
+                    <span className="font-medium">Platform:</span>{" "}
+                    {order.platform || "—"}
+                  </div>
+
+                  <div>
+                    <span className="font-medium">Target Country:</span>{" "}
+                    {order.country || "—"}
+                  </div>
+
+                  <div>
+                    <span className="font-medium">Category:</span>{" "}
+                    {order.service_category || "—"}
+                  </div>
+
+                  <div>
                     <span className="font-medium">Target:</span>{" "}
                     <span className="break-all text-slate-500">
                       {order.target_url}
@@ -186,8 +223,28 @@ export default function OrdersPage() {
                   </div>
 
                   <div>
-                    <span className="font-medium">Price:</span>{" "}
+                    <span className="font-medium">Amount Paid:</span>{" "}
                     ₹{Number(order.price || 0).toFixed(2)}
+                  </div>
+
+                  <div>
+                    <span className="font-medium">Payment:</span>{" "}
+                    <span className="font-semibold text-green-600">
+                      Paid
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="font-medium">Wallet Transaction:</span>{" "}
+                    {(() => {
+                      const transaction = transactions.find(
+                        (item) => item.reference_id === String(order.id)
+                      );
+
+                      return transaction
+                        ? `TXN #${transaction.id}`
+                        : "Not found";
+                    })()}
                   </div>
 
                   <div>

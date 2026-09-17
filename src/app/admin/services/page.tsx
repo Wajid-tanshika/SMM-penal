@@ -9,6 +9,9 @@ type Service = {
   name: string;
   description: string | null;
   type: string;
+  platform: string;
+  country: string;
+  service_category: string;
   price_per_100: number;
   min_quantity: number;
   max_quantity: number;
@@ -100,6 +103,9 @@ export default function ServicesAdminPage() {
         name: service.name,
         description: service.description,
         type: service.type,
+        platform: service.platform,
+        country: service.country,
+        service_category: service.service_category,
         price_per_100: Number(service.price_per_100),
         min_quantity: Number(service.min_quantity),
         max_quantity: Number(service.max_quantity),
@@ -257,6 +263,89 @@ export default function ServicesAdminPage() {
                     }
                     className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-900"
                   />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    Platform
+                  </label>
+
+                  <select
+                    value={service.platform}
+                    onChange={(e) =>
+                      updateLocal(
+                        service.id,
+                        "platform",
+                        e.target.value
+                      )
+                    }
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none"
+                  >
+                    <option value="Instagram">Instagram</option>
+                    <option value="YouTube">YouTube</option>
+                    <option value="Facebook">Facebook</option>
+                    <option value="TikTok">TikTok</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    Country
+                  </label>
+
+                  <select
+                    value={service.country}
+                    onChange={(e) =>
+                      updateLocal(
+                        service.id,
+                        "country",
+                        e.target.value
+                      )
+                    }
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none"
+                  >
+                    <option value="All Countries">🌍 All Countries</option>
+                    <option value="India">🇮🇳 India</option>
+                    <option value="United States">🇺🇸 United States</option>
+                    <option value="United Kingdom">🇬🇧 United Kingdom</option>
+                    <option value="Canada">🇨🇦 Canada</option>
+                    <option value="Australia">🇦🇺 Australia</option>
+                    <option value="UAE">🇦🇪 UAE</option>
+                    <option value="Saudi Arabia">🇸🇦 Saudi Arabia</option>
+                    <option value="Germany">🇩🇪 Germany</option>
+                    <option value="France">🇫🇷 France</option>
+                    <option value="Pakistan">🇵🇰 Pakistan</option>
+                    <option value="Bangladesh">🇧🇩 Bangladesh</option>
+                    <option value="Nepal">🇳🇵 Nepal</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    Service Category
+                  </label>
+
+                  <select
+                    value={service.service_category}
+                    onChange={(e) =>
+                      updateLocal(
+                        service.id,
+                        "service_category",
+                        e.target.value
+                      )
+                    }
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none"
+                  >
+                    <option value="Reels Promotion">Reels Promotion</option>
+                    <option value="Video Promotion">Video Promotion</option>
+                    <option value="Followers Promotion">
+                      Followers Promotion
+                    </option>
+                    <option value="Profile Promotion">
+                      Profile Promotion
+                    </option>
+                  </select>
                 </div>
 
                 <div>

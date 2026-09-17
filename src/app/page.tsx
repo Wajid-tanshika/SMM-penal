@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
@@ -12,11 +14,29 @@ type Service = {
   min_quantity: number;
   max_quantity: number;
   active: boolean;
+  platform: string;
+  country: string;
+  service_category: string;
 };
+
+function loadRazorpayScript() {
+  if (document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]')) {
+    return;
+  }
+
+  const script = document.createElement("script");
+  script.src = "https://checkout.razorpay.com/v1/checkout.js";
+  script.async = true;
+  document.head.appendChild(script);
+}
 
 export default function Home() {
   const [services, setServices] = useState<Service[]>([]);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
+
+  const [platformFilter, setPlatformFilter] = useState("All");
+  const [countryFilter, setCountryFilter] = useState("All");
+  const [categoryFilter, setCategoryFilter] = useState("All");
 
   const [targetUrl, setTargetUrl] = useState("");
   const [quantity, setQuantity] = useState("100");
@@ -33,8 +53,11 @@ export default function Home() {
 
   const [orderCount, setOrderCount] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
+  const [walletBalance, setWalletBalance] = useState(0);
 
   useEffect(() => {
+    loadRazorpayScript();
+
     loadServices();
     loadUser();
 
@@ -46,6 +69,7 @@ export default function Home() {
 
       if (currentUser) {
         loadOrderStats();
+        loadWalletBalance();
       } else {
         setOrderCount(0);
         setCompletedCount(0);
@@ -58,7 +82,7 @@ export default function Home() {
   async function loadServices() {
     const { data, error } = await supabase
   .from("services")
-  .select("id,name,description,type,price_per_100,min_quantity,max_quantity,active")
+  .select("id,name,description,type,price_per_100,min_quantity,max_quantity,active,platform,country,service_category")
   .order("id", { ascending: true });
 
 if (error) {
@@ -116,7 +140,26 @@ if (error) {
 
     if (data.user) {
       loadOrderStats();
+        loadWalletBalance();
     }
+  }
+
+  async function loadWalletBalance() {
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (!currentUser) {
+      setWalletBalance(0);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("wallets")
+      .select("balance")
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+    if (error) {
+      console.error("Wallet balance error:", error);
+      return;
+    }
+    setWalletBalance(Number(data?.balance ?? 0));
   }
 
   async function loadOrderStats() {
@@ -203,6 +246,7 @@ if (error) {
         setPassword("");
         setAuthMessage("");
         loadOrderStats();
+        loadWalletBalance();
       }
     } else {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -221,7 +265,204 @@ if (error) {
       setPassword("");
       setAuthMessage("");
       loadOrderStats();
+        loadWalletBalance();
     }
+  }
+
+  async function handleAddMoney() {
+    const amountInput = window.prompt("Enter recharge amount (₹10 to ₹1,00,000):");
+    if (!amountInput) return;
+
+    const amount = Number(amountInput);
+
+    if (!Number.isFinite(amount) || amount < 10 || amount > 100000) {
+      setMessage("Recharge amount must be between ₹10 and ₹1,00,000.");
+      return;
+    }
+
+    setMessage("Creating Razorpay order...");
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      setMessage("Please login first.");
+      return;
+    }
+
+    const response = await fetch("/api/recharge/create-order", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ amount }),
+    });
+
+    const orderData = await response.json();
+
+    if (!response.ok) {
+      setMessage(orderData.error || "Could not create payment order.");
+      return;
+    }
+
+    const RazorpayCheckout = (window as typeof window & {
+      Razorpay?: new (options: Record<string, unknown>) => {
+        open: () => void;
+      };
+    }).Razorpay;
+
+    if (!RazorpayCheckout) {
+      setMessage("Loading Razorpay Checkout...");
+
+      await new Promise<void>((resolve, reject) => {
+        const existing = document.querySelector(
+          'script[src="https://checkout.razorpay.com/v1/checkout.js"]'
+        );
+
+        if (existing) {
+          existing.addEventListener("load", () => resolve(), { once: true });
+          existing.addEventListener("error", () => reject(), { once: true });
+        } else {
+          const script = document.createElement("script");
+          script.src = "https://checkout.razorpay.com/v1/checkout.js";
+          script.async = true;
+          script.onload = () => resolve();
+          script.onerror = () => reject();
+          document.head.appendChild(script);
+        }
+      }).catch(() => {
+        setMessage("Razorpay Checkout could not load. Check your internet connection and try again.");
+      });
+
+      const LoadedRazorpay = (window as typeof window & {
+        Razorpay?: new (options: Record<string, unknown>) => {
+          open: () => void;
+        };
+      }).Razorpay;
+
+      if (!LoadedRazorpay) {
+        return;
+      }
+
+      const checkout = new LoadedRazorpay({
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "SMM Panel",
+        description: "Wallet Recharge",
+        order_id: orderData.orderId,
+        handler: async (payment: {
+          razorpay_order_id: string;
+          razorpay_payment_id: string;
+          razorpay_signature: string;
+        }) => {
+          setMessage("Verifying payment...");
+
+          const verifyResponse = await fetch("/api/recharge/verify", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify(payment),
+          });
+
+          const verifyData = await verifyResponse.json();
+
+          if (!verifyResponse.ok) {
+            setMessage(verifyData.error || "Payment verification failed.");
+            return;
+          }
+
+          await loadWalletBalance();
+          setMessage("Payment successful. Wallet credited.");
+        },
+        modal: {
+          ondismiss: () => setMessage("Payment window closed."),
+        },
+        theme: {
+          color: "#0f172a",
+        },
+      });
+
+      checkout.open();
+      return;
+    }
+
+    const checkout = new RazorpayCheckout({
+      key: orderData.keyId,
+      amount: orderData.amount,
+      currency: orderData.currency,
+      name: "SMM Panel",
+      description: "Wallet Recharge",
+      order_id: orderData.orderId,
+      handler: async (payment: {
+        razorpay_order_id: string;
+        razorpay_payment_id: string;
+        razorpay_signature: string;
+      }) => {
+        setMessage("Verifying payment...");
+
+        const verifyResponse = await fetch("/api/recharge/verify", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(payment),
+        });
+
+        const verifyData = await verifyResponse.json();
+
+        if (!verifyResponse.ok) {
+          setMessage(verifyData.error || "Payment verification failed.");
+          return;
+        }
+
+        await loadWalletBalance();
+
+        setMessage("Payment successful. Wallet credited.");
+      },
+      modal: {
+        ondismiss: () => {
+          setMessage("Payment window closed.");
+        },
+      },
+      theme: {
+        color: "#0f172a",
+      },
+    });
+
+    checkout.open();
+  }
+
+  async function handleForgotPassword() {
+    setAuthMessage("");
+
+    const resetEmail = email.trim();
+
+    if (!resetEmail) {
+      setAuthMessage("Please enter your email first.");
+      return;
+    }
+
+    setAuthMessage("Sending password reset email...");
+
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      resetEmail,
+      {
+        redirectTo: `${window.location.origin}/reset-password`,
+      }
+    );
+
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
+
+    setAuthMessage("Password reset email sent. Please check your email.");
   }
 
   async function logout() {
@@ -279,33 +520,34 @@ if (error) {
 
     const price = calculatePrice();
 
-    const { data, error } = await supabase
-      .from("orders")
-      .insert({
-        user_id: user.id,
-        service: selectedService.name,
-        target_url: targetUrl.trim(),
-        quantity: quantityNumber,
-        price: Number(price.toFixed(2)),
-        status: "pending",
-      })
-      .select()
-      .single();
+    const { data, error } = await supabase.rpc("create_paid_order", {
+      p_user_id: user.id,
+      p_service_id: selectedService.id,
+      p_target_url: targetUrl.trim(),
+      p_quantity: quantityNumber,
+    });
 
     if (error) {
-      console.error("Supabase order error:", error);
+      console.error("Paid order error:", error);
       setMessage(`Order failed: ${error.message}`);
       return;
     }
 
+    const orderResult = data as {
+      success: boolean;
+      order_id: number;
+      balance: number;
+    };
+
     setMessage(
-      `Order created successfully! Order ID: ${data.id}`
+      `Order created successfully! Order ID: ${orderResult.order_id}`
     );
 
     setTargetUrl("");
     setQuantity(String(selectedService.min_quantity));
 
     loadOrderStats();
+        loadWalletBalance();
   }
 
   return (
@@ -319,32 +561,89 @@ if (error) {
             </p>
           </div>
 
-          {!authLoading &&
-            (user ? (
-              <div className="flex items-center gap-2">
-                <span className="hidden max-w-[160px] truncate text-xs text-slate-500 sm:block">
-                  {user.email}
-                </span>
+          {!authLoading && (
+            <div className="relative">
+              <details className="group">
+                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white">
+                  <span>👤</span>
+                  <span>Profile</span>
+                  <span className="text-xs">▼</span>
+                </summary>
 
-                <button
-                  onClick={logout}
-                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white"
-                >
-                  Logout
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => {
-                  setAuthMode("login");
-                  setAuthMessage("");
-                  setShowAuth(true);
-                }}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white"
-              >
-                Login
-              </button>
-            ))}
+                <div className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-2xl border bg-white p-2 shadow-xl">
+                  {user ? (
+                    <div className="border-b px-3 py-2">
+                      <p className="text-xs text-slate-400">Logged in as</p>
+                      <p className="truncate text-sm font-medium text-slate-700">
+                        {user.email}
+                      </p>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode("login");
+                        setAuthMessage("");
+                        setShowAuth(true);
+                      }}
+                      className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100"
+                    >
+                      🔐 Login
+                    </button>
+                  )}
+
+                  <Link
+                    href="/profile"
+                    className="flex items-center rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                  >
+                    👤 Profile
+                  </Link>
+
+                  <Link
+                    href="/"
+                    className="flex items-center rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                  >
+                    🏠 Dashboard
+                  </Link>
+
+                  <Link
+                    href="/orders"
+                    className="flex items-center rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                  >
+                    📦 Orders
+                  </Link>
+
+                  <a
+                    href="#services"
+                    className="flex items-center rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                  >
+                    🛍️ Services
+                  </a>
+
+                  <Link
+                    href="/support"
+                    className="flex items-center rounded-xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                  >
+                    🎫 Support
+                  </Link>
+
+                  {user && (
+                    <>
+                      <div className="my-2 border-t" />
+
+                      <button
+                        type="button"
+                        onClick={logout}
+                        className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-medium text-red-600 hover:bg-red-50"
+                      >
+                        🚪 Logout
+                      </button>
+                    </>
+                  )}
+                </div>
+              </details>
+            </div>
+          )}
         </div>
       </header>
 
@@ -368,7 +667,7 @@ if (error) {
           {[
             ["Orders", String(orderCount)],
             ["Completed", String(completedCount)],
-            ["Balance", "₹0"],
+            ["Balance", `₹${walletBalance.toFixed(2)}`],
             ["Services", String(services.length)],
           ].map(([title, value]) => (
             <div key={title} className="rounded-2xl bg-white p-5 shadow-sm">
@@ -378,6 +677,26 @@ if (error) {
           ))}
         </section>
 
+        {user && (
+          <section className="mt-5 rounded-2xl bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-slate-500">Wallet Balance</p>
+                <p className="mt-1 text-2xl font-bold">
+                  ₹{walletBalance.toFixed(2)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddMoney}
+                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
+              >
+                Add Money
+              </button>
+            </div>
+          </section>
+        )}
+
         <section className="mt-8">
           <h2 className="text-2xl font-bold">Services</h2>
 
@@ -385,8 +704,65 @@ if (error) {
             Select a service to create an order.
           </p>
 
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <select
+              value={platformFilter}
+              onChange={(e) => setPlatformFilter(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm"
+            >
+              <option value="All">All Platforms</option>
+              <option value="Instagram">Instagram</option>
+              <option value="YouTube">YouTube</option>
+              <option value="Facebook">Facebook</option>
+              <option value="TikTok">TikTok</option>
+              <option value="Other">Other</option>
+            </select>
+
+            <select
+              value={countryFilter}
+              onChange={(e) => setCountryFilter(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm"
+            >
+              <option value="All">All Countries</option>
+              <option value="India">India</option>
+              <option value="United States">United States</option>
+              <option value="United Kingdom">United Kingdom</option>
+              <option value="Canada">Canada</option>
+              <option value="Australia">Australia</option>
+              <option value="UAE">UAE</option>
+              <option value="Saudi Arabia">Saudi Arabia</option>
+              <option value="Germany">Germany</option>
+              <option value="France">France</option>
+              <option value="Pakistan">Pakistan</option>
+              <option value="Bangladesh">Bangladesh</option>
+              <option value="Nepal">Nepal</option>
+            </select>
+
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm"
+            >
+              <option value="All">All Categories</option>
+              <option value="Reels Promotion">Reels Promotion</option>
+              <option value="Video Promotion">Video Promotion</option>
+              <option value="Followers Promotion">Followers Promotion</option>
+              <option value="Profile Promotion">Profile Promotion</option>
+            </select>
+          </div>
+
           <div className="mt-4 grid gap-4 md:grid-cols-3">
-            {services.map((service) => (
+            {services
+              .filter((service) =>
+                platformFilter === "All" || service.platform === platformFilter
+              )
+              .filter((service) =>
+                countryFilter === "All" || service.country === countryFilter
+              )
+              .filter((service) =>
+                categoryFilter === "All" || service.service_category === categoryFilter
+              )
+              .map((service) => (
               <button
                 key={service.id}
                 onClick={() => selectService(service)}
@@ -398,6 +774,30 @@ if (error) {
               >
                 <div className="text-3xl">
                   {service.type === "reel" ? "🎬" : "👤"}
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <span className={`rounded-full px-2 py-1 font-semibold ${
+                    selectedService?.id === service.id
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-100 text-slate-700"
+                  }`}>
+                    {service.platform}
+                  </span>
+                  <span className={`rounded-full px-2 py-1 font-semibold ${
+                    selectedService?.id === service.id
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-100 text-slate-700"
+                  }`}>
+                    🌍 {service.country}
+                  </span>
+                  <span className={`rounded-full px-2 py-1 font-semibold ${
+                    selectedService?.id === service.id
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-100 text-slate-700"
+                  }`}>
+                    {service.service_category}
+                  </span>
                 </div>
 
                 <h3 className="mt-4 font-bold">
@@ -426,6 +826,32 @@ if (error) {
               </button>
             ))}
           </div>
+
+          {services.filter((service) =>
+            (platformFilter === "All" || service.platform === platformFilter) &&
+            (countryFilter === "All" || service.country === countryFilter) &&
+            (categoryFilter === "All" || service.service_category === categoryFilter)
+          ).length === 0 && (
+            <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center">
+              <p className="font-semibold text-slate-700">
+                No services found
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Try another platform, country or category.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setPlatformFilter("All");
+                  setCountryFilter("All");
+                  setCategoryFilter("All");
+                }}
+                className="mt-4 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white"
+              >
+                Reset Filters
+              </button>
+            </div>
+          )}
         </section>
 
         {selectedService && (
@@ -526,53 +952,6 @@ if (error) {
           </section>
         )}
 
-        <section className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4">
-          <a
-            href="/"
-            className="rounded-2xl bg-white p-5 text-center font-medium shadow-sm hover:bg-slate-50"
-          >
-            Dashboard
-          </a>
-
-          <a
-            href="/orders"
-            className="rounded-2xl bg-white p-5 text-center font-medium shadow-sm hover:bg-slate-50"
-          >
-            Orders
-          </a>
-
-          <a
-            href="/admin/services"
-            className="rounded-2xl bg-white p-5 text-center font-medium shadow-sm hover:bg-slate-50"
-          >
-            Services
-          </a>
-
-          <button className="rounded-2xl bg-white p-5 text-center font-medium shadow-sm hover:bg-slate-50">
-            Support
-          </button>
-
-          {user ? (
-            <a
-              href="/profile"
-              className="rounded-2xl bg-white p-5 text-center font-medium shadow-sm hover:bg-slate-50"
-            >
-              Profile
-            </a>
-          ) : (
-            <button
-              onClick={() => {
-                setAuthMode("login");
-                setAuthMessage("");
-                setShowAuth(true);
-              }}
-              className="rounded-2xl bg-white p-5 text-center font-medium shadow-sm hover:bg-slate-50"
-            >
-              Login
-            </button>
-          )}
-        </section>
-
         <footer className="py-8 text-center text-sm text-slate-500">
           © 2026 SMM Panel
         </footer>
@@ -629,6 +1008,16 @@ if (error) {
               >
                 {authMode === "login" ? "Login" : "Register"}
               </button>
+
+              {authMode === "login" && (
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="w-full text-center text-sm font-medium text-blue-600"
+                >
+                  Forgot Password?
+                </button>
+              )}
 
               {authMessage && (
                 <div className="rounded-xl bg-slate-100 p-3 text-sm text-slate-700">
