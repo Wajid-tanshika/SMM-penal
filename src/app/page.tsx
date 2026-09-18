@@ -879,37 +879,122 @@ if (error) {
             <form onSubmit={submitOrder} className="mt-6 space-y-5">
               <div>
                 <label className="mb-2 block text-sm font-medium">
-                  {selectedService.service_category === "Likes Promotion"
-                    ? "Instagram Reel/Post URL"
-                    : selectedService.service_category === "Comments Promotion"
-                    ? "Instagram Reel/Post URL"
-                    : selectedService.type === "reel"
-                    ? "Instagram Reel URL"
-                    : "Instagram Profile URL"}
+                  {(() => {
+                    const platform = selectedService.platform.toLowerCase();
+                    const category = selectedService.service_category;
+                    const isEngagement =
+                      category === "Likes Promotion" ||
+                      category === "Comments Promotion";
+                    const isVideo = selectedService.type.toLowerCase() === "reel";
+
+                    if (platform === "youtube") {
+                      return isEngagement || isVideo
+                        ? "YouTube Video URL"
+                        : "YouTube Channel URL";
+                    }
+
+                    if (platform === "facebook") {
+                      return isEngagement
+                        ? "Facebook Post/Reel URL"
+                        : isVideo
+                        ? "Facebook Reel/Post URL"
+                        : "Facebook Page/Profile URL";
+                    }
+
+                    if (platform === "tiktok") {
+                      return isEngagement || isVideo
+                        ? "TikTok Video URL"
+                        : "TikTok Profile URL";
+                    }
+
+                    if (platform === "instagram") {
+                      return isEngagement
+                        ? "Instagram Reel/Post URL"
+                        : isVideo
+                        ? "Instagram Reel URL"
+                        : "Instagram Profile URL";
+                    }
+
+                    return "Target URL";
+                  })()}
                 </label>
 
                 <input
                   type="url"
                   value={targetUrl}
                   onChange={(e) => setTargetUrl(e.target.value)}
-                  placeholder={
-                    selectedService.service_category === "Likes Promotion" ||
-                    selectedService.service_category === "Comments Promotion"
-                      ? "https://www.instagram.com/reel/..."
-                      : selectedService.type === "reel"
-                      ? "https://www.instagram.com/reel/..."
-                      : "https://www.instagram.com/username"
-                  }
+                  placeholder={(() => {
+                    const platform = selectedService.platform.toLowerCase();
+                    const isVideo = selectedService.type.toLowerCase() === "reel";
+                    const isEngagement =
+                      selectedService.service_category === "Likes Promotion" ||
+                      selectedService.service_category === "Comments Promotion";
+
+                    if (platform === "youtube") {
+                      return isEngagement || isVideo
+                        ? "https://www.youtube.com/watch?v=..."
+                        : "https://www.youtube.com/@channel";
+                    }
+
+                    if (platform === "facebook") {
+                      return isEngagement || isVideo
+                        ? "https://www.facebook.com/.../posts/..."
+                        : "https://www.facebook.com/yourpage";
+                    }
+
+                    if (platform === "tiktok") {
+                      return isEngagement || isVideo
+                        ? "https://www.tiktok.com/@user/video/..."
+                        : "https://www.tiktok.com/@username";
+                    }
+
+                    if (platform === "instagram") {
+                      return isEngagement || isVideo
+                        ? "https://www.instagram.com/reel/..."
+                        : "https://www.instagram.com/username";
+                    }
+
+                    return "https://example.com/...";
+                  })()}
                   className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-900"
                 />
 
                 <p className="mt-2 text-xs text-slate-500">
-                  {selectedService.service_category === "Likes Promotion" ||
-                  selectedService.service_category === "Comments Promotion"
-                    ? "Enter a public Instagram Reel or Post URL. Do not enter an Instagram password."
-                    : selectedService.type === "reel"
-                    ? "Enter a public Instagram Reel URL. Do not enter an Instagram password."
-                    : "Enter a public Instagram Profile URL. Do not enter an Instagram password."}
+                  {(() => {
+                    const platform = selectedService.platform.toLowerCase();
+                    const isVideo = selectedService.type.toLowerCase() === "reel";
+                    const isEngagement =
+                      selectedService.service_category === "Likes Promotion" ||
+                      selectedService.service_category === "Comments Promotion";
+
+                    if (platform === "youtube") {
+                      return isEngagement || isVideo
+                        ? "Enter a public YouTube Video URL. Do not enter a password."
+                        : "Enter a public YouTube Channel URL. Do not enter a password.";
+                    }
+
+                    if (platform === "facebook") {
+                      return isEngagement || isVideo
+                        ? "Enter a public Facebook Post or Reel URL. Do not enter a password."
+                        : "Enter a public Facebook Page/Profile URL. Do not enter a password.";
+                    }
+
+                    if (platform === "tiktok") {
+                      return isEngagement || isVideo
+                        ? "Enter a public TikTok Video URL. Do not enter a password."
+                        : "Enter a public TikTok Profile URL. Do not enter a password.";
+                    }
+
+                    if (platform === "instagram") {
+                      return isEngagement
+                        ? "Enter a public Instagram Reel or Post URL. Do not enter an Instagram password."
+                        : isVideo
+                        ? "Enter a public Instagram Reel URL. Do not enter an Instagram password."
+                        : "Enter a public Instagram Profile URL. Do not enter an Instagram password.";
+                    }
+
+                    return "Enter a public target URL. Do not enter a password.";
+                  })()}
                 </p>
               </div>
 

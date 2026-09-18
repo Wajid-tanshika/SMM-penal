@@ -23,6 +23,7 @@ export default function ServicesAdminPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [savingServiceId, setSavingServiceId] = useState<number | null>(null);
 
   useEffect(() => {
     checkAdmin();
@@ -95,7 +96,8 @@ export default function ServicesAdminPage() {
   }
 
   async function saveService(service: Service) {
-    setMessage("Saving...");
+    setSavingServiceId(service.id);
+    setMessage(`Saving "${service.name}"...`);
 
     const { error } = await supabase
       .from("services")
@@ -112,6 +114,8 @@ export default function ServicesAdminPage() {
         active: service.active,
       })
       .eq("id", service.id);
+
+    setSavingServiceId(null);
 
     if (error) {
       console.error(error);
@@ -453,9 +457,10 @@ export default function ServicesAdminPage() {
               <button
                 type="button"
                 onClick={() => saveService(service)}
-                className="mt-6 w-full rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-800"
+                disabled={savingServiceId === service.id}
+                className="mt-6 w-full rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Save Changes
+                {savingServiceId === service.id ? "Saving..." : "Save Changes"}
               </button>
             </div>
           ))}
