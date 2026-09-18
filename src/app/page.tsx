@@ -709,7 +709,17 @@ if (error) {
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <select
               value={platformFilter}
-              onChange={(e) => setPlatformFilter(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setPlatformFilter(value);
+
+                const matchingServices = services.filter(
+                  (service) => value === "All" || service.platform === value
+                );
+
+                setSelectedService(matchingServices[0] ?? null);
+                setTargetUrl("");
+              }}
               className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm"
             >
               <option value="All">All Platforms</option>
