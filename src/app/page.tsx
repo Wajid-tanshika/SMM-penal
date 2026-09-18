@@ -40,6 +40,7 @@ export default function Home() {
 
   const [targetUrl, setTargetUrl] = useState("");
   const [quantity, setQuantity] = useState("100");
+  const [targetCountry, setTargetCountry] = useState("India");
   const [message, setMessage] = useState("");
 
   const [user, setUser] = useState<any>(null);
@@ -525,6 +526,7 @@ if (error) {
       p_service_id: selectedService.id,
       p_target_url: targetUrl.trim(),
       p_quantity: quantityNumber,
+      p_target_country: targetCountry,
     });
 
     if (error) {
@@ -748,6 +750,8 @@ if (error) {
               <option value="Video Promotion">Video Promotion</option>
               <option value="Followers Promotion">Followers Promotion</option>
               <option value="Profile Promotion">Profile Promotion</option>
+              <option value="Likes Promotion">Likes Promotion</option>
+              <option value="Comments Promotion">Comments Promotion</option>
             </select>
           </div>
 
@@ -875,7 +879,11 @@ if (error) {
             <form onSubmit={submitOrder} className="mt-6 space-y-5">
               <div>
                 <label className="mb-2 block text-sm font-medium">
-                  {selectedService.type === "reel"
+                  {selectedService.service_category === "Likes Promotion"
+                    ? "Instagram Reel/Post URL"
+                    : selectedService.service_category === "Comments Promotion"
+                    ? "Instagram Reel/Post URL"
+                    : selectedService.type === "reel"
                     ? "Instagram Reel URL"
                     : "Instagram Profile URL"}
                 </label>
@@ -885,7 +893,10 @@ if (error) {
                   value={targetUrl}
                   onChange={(e) => setTargetUrl(e.target.value)}
                   placeholder={
-                    selectedService.type === "reel"
+                    selectedService.service_category === "Likes Promotion" ||
+                    selectedService.service_category === "Comments Promotion"
+                      ? "https://www.instagram.com/reel/..."
+                      : selectedService.type === "reel"
                       ? "https://www.instagram.com/reel/..."
                       : "https://www.instagram.com/username"
                   }
@@ -893,8 +904,41 @@ if (error) {
                 />
 
                 <p className="mt-2 text-xs text-slate-500">
-                  Enter a public Instagram URL. Do not enter an Instagram
-                  password.
+                  {selectedService.service_category === "Likes Promotion" ||
+                  selectedService.service_category === "Comments Promotion"
+                    ? "Enter a public Instagram Reel or Post URL. Do not enter an Instagram password."
+                    : selectedService.type === "reel"
+                    ? "Enter a public Instagram Reel URL. Do not enter an Instagram password."
+                    : "Enter a public Instagram Profile URL. Do not enter an Instagram password."}
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium">
+                  Target Country
+                </label>
+
+                <select
+                  value={targetCountry}
+                  onChange={(e) => setTargetCountry(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-900"
+                >
+                  <option value="India">🇮🇳 India</option>
+                  <option value="United States">🇺🇸 United States</option>
+                  <option value="United Kingdom">🇬🇧 United Kingdom</option>
+                  <option value="Canada">🇨🇦 Canada</option>
+                  <option value="Australia">🇦🇺 Australia</option>
+                  <option value="UAE">🇦🇪 UAE</option>
+                  <option value="Saudi Arabia">🇸🇦 Saudi Arabia</option>
+                  <option value="Germany">🇩🇪 Germany</option>
+                  <option value="France">🇫🇷 France</option>
+                  <option value="Pakistan">🇵🇰 Pakistan</option>
+                  <option value="Bangladesh">🇧🇩 Bangladesh</option>
+                  <option value="Nepal">🇳🇵 Nepal</option>
+                </select>
+
+                <p className="mt-2 text-xs text-slate-500">
+                  Select the country you want to target for this promotion.
                 </p>
               </div>
 
